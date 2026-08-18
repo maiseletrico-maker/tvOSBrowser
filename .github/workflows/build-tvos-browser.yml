@@ -15,8 +15,10 @@ jobs:
       - name: Select Xcode
         run: |
           sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+
           echo "Xcode path:"
           xcode-select -p
+
           echo "Xcode version:"
           xcodebuild -version
 
@@ -26,21 +28,29 @@ jobs:
 
           find . -type d -name "*.xcodeproj" -print
 
-          PROJECT=$(find . -type d -name "tvOSBrowser.xcodeproj" -print -quit)
+          PROJECT=$(find . -type d -name "Browser.xcodeproj" -print -quit)
 
           if [ -z "$PROJECT" ]; then
-            echo "ERROR: tvOSBrowser.xcodeproj not found"
+            echo "ERROR: Browser.xcodeproj not found"
             exit 1
           fi
 
-          echo "FOUND:"
+          echo ""
+          echo "FOUND PROJECT:"
           echo "$PROJECT"
 
           echo "PROJECT_PATH=$PROJECT" >> "$GITHUB_ENV"
 
-      - name: List project
+      - name: List project schemes
         run: |
-          echo "PROJECT_PATH=$PROJECT_PATH"
+          echo "======================================"
+          echo "PROJECT INFORMATION"
+          echo "======================================"
+
+          echo "Project:"
+          echo "$PROJECT_PATH"
+
+          echo ""
 
           xcodebuild \
             -project "$PROJECT_PATH" \
@@ -55,9 +65,11 @@ jobs:
           echo "Project:"
           echo "$PROJECT_PATH"
 
+          echo ""
+
           xcodebuild \
             -project "$PROJECT_PATH" \
-            -scheme "tvOSBrowser" \
+            -scheme "Browser" \
             -sdk appletvos \
             -configuration Release \
             -derivedDataPath "$GITHUB_WORKSPACE/build" \
@@ -71,9 +83,12 @@ jobs:
           echo "BUILD DIRECTORY"
           echo "======================================"
 
-          find "$GITHUB_WORKSPACE/build" -maxdepth 8 -print 2>/dev/null || true
+          find "$GITHUB_WORKSPACE/build" \
+            -maxdepth 8 \
+            -print 2>/dev/null || true
 
           echo ""
+
           echo "======================================"
           echo "APP FILES"
           echo "======================================"
@@ -87,31 +102,40 @@ jobs:
         run: |
           set -e
 
+          echo "Searching for application..."
+
           APP=$(find "$GITHUB_WORKSPACE/build" \
             -type d \
             -name "*.app" \
             -print -quit)
 
           if [ -z "$APP" ]; then
+            echo ""
             echo "ERROR: No .app was generated."
+            echo ""
+            echo "Build contents:"
+            find "$GITHUB_WORKSPACE/build" -maxdepth 8 -print 2>/dev/null || true
             exit 1
           fi
 
-          echo "Found:"
+          echo ""
+          echo "FOUND APPLICATION:"
           echo "$APP"
 
           rm -rf Payload
           mkdir -p Payload
 
-          cp -R "$APP" Payload/tvOSBrowser.app
+          cp -R "$APP" Payload/Browser.app
 
-          zip -r tvOSBrowser-unsigned.ipa Payload
+          zip -r Browser-unsigned.ipa Payload
 
-          ls -lh tvOSBrowser-unsigned.ipa
+          echo ""
+          echo "IPA CREATED:"
+          ls -lh Browser-unsigned.ipa
 
       - name: Upload IPA
         uses: actions/upload-artifact@v5
         if: success()
         with:
-          name: tvOSBrowser-unsigned
-          path: tvOSBrowser-unsigned.ipa
+          name: Browser-unsigned
+          path: Browser-unsigned.ipa
