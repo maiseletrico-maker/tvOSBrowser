@@ -1,4 +1,4 @@
-name: Find tvOS Browser Project
+name: Build tvOS Browser
 
 on:
   workflow_dispatch:
@@ -12,38 +12,91 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Show repository
+      - name: Select Xcode 16.2
         run: |
-          echo "================================="
-          echo "CURRENT DIRECTORY"
-          echo "================================="
-          pwd
-
-          echo ""
-          echo "================================="
-          echo "FILES"
-          echo "================================="
-          find . -maxdepth 5 -print | sort
-
-          echo ""
-          echo "================================="
-          echo "XCODE PROJECTS"
-          echo "================================="
-          find . -type d -name "*.xcodeproj" -print
-
-          echo ""
-          echo "================================="
-          echo "XCODE WORKSPACES"
-          echo "================================="
-          find . -type d -name "*.xcworkspace" -print
-
-      - name: Check Xcode
-        run: |
-          echo "================================="
-          echo "XCODE"
-          echo "================================="
-
-          ls -la /Applications/ | grep Xcode || true
-
-          echo ""
+          sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+          xcode-select -p
           xcodebuild -version
+
+      - name: Find Xcode project
+        run: |
+          PROJECT=$(find . -type d -name "tvOSBrowser.xcodeproj" -print -quit)
+
+          if [ -z "$PROJECT" ]; then
+            echo "ERROR: tvOSBrowser.xcodeproj was not found."
+            exit 1
+          fi
+
+          echo "Found project:"
+          echo "$PROJECT"
+
+          echo "PROJECT_PATH=$PROJECT" >> "$GITHUB_ENV"
+
+      - name: List schemes
+        run: |
+          echo "Project:"
+          echo "$PROJECT_PATH"
+
+          xcodebuild \
+            -project "$PROJECT_PATH" \
+            -list
+
+      - name: Build
+        run: |
+          set -o pipefail
+
+          xcodebuild \
+            -project "$PROJECT_PATH" \
+            -scheme "tvOSBrowser" \
+            -sdk appletvos \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            | tee xcodebuild.log
+
+      - name: Find application
+        run: |
+          echo "Searching for .app..."
+
+          APP=$(find build -type d -path "*/Release-appletvos/*.app" -print -quit)
+
+          if [ -z "$APP" ]; then
+            echo "ERROR: No .app was produced."
+            find build -maxdepth 8 -print || true
+            exit 1
+          fi
+
+          echo "Application found:"
+          echo "$APP"
+
+          echo "APP_PATH=$APP" >> "$GITHUB_ENV"
+
+      - name: Package IPA
+        run: |
+          set -e
+
+          rm -rf Payload
+          mkdir Payload
+
+          cp -R "$APP_PATH" Payload/tvOSBrowser.app
+
+          zip -r tvOSBrowser-unsigned.ipa Payload
+
+          echo ""
+          echo "IPA created:"
+          ls -lh tvOSBrowser-unsigned.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v5
+        with:
+          name: tvOSBrowser-unsigned
+          path: tvOSBrowser-unsigned.ipa
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: xcodebuild-log
+          path: xcodebuild.log
+          if-no-files-found: ignore
