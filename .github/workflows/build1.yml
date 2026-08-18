@@ -1,0 +1,40 @@
+name: Build tvOS Browser
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Build
+        run: |
+          xcodebuild \
+            -project "_Project/tvOSBrowser.xcodeproj" \
+            -scheme "tvOSBrowser" \
+            -sdk appletvos \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-appletvos/tvOSBrowser.app Payload/
+          zip -r tvOSBrowser-unsigned.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: tvOSBrowser-unsigned
+          path: tvOSBrowser-unsigned.ipa
