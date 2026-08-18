@@ -12,30 +12,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Select Xcode 16.2
+      - name: Select Xcode
         run: |
           sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+          echo "Xcode path:"
           xcode-select -p
+          echo "Xcode version:"
           xcodebuild -version
 
       - name: Find Xcode project
         run: |
+          echo "Searching for Xcode project..."
+
+          find . -type d -name "*.xcodeproj" -print
+
           PROJECT=$(find . -type d -name "tvOSBrowser.xcodeproj" -print -quit)
 
           if [ -z "$PROJECT" ]; then
-            echo "ERROR: tvOSBrowser.xcodeproj was not found."
+            echo "ERROR: tvOSBrowser.xcodeproj not found"
             exit 1
           fi
 
-          echo "Found project:"
+          echo "FOUND:"
           echo "$PROJECT"
 
           echo "PROJECT_PATH=$PROJECT" >> "$GITHUB_ENV"
 
-      - name: List schemes
+      - name: List project
         run: |
-          echo "Project:"
-          echo "$PROJECT_PATH"
+          echo "PROJECT_PATH=$PROJECT_PATH"
 
           xcodebuild \
             -project "$PROJECT_PATH" \
@@ -43,60 +48,70 @@ jobs:
 
       - name: Build
         run: |
-          set -o pipefail
+          echo "======================================"
+          echo "STARTING BUILD"
+          echo "======================================"
+
+          echo "Project:"
+          echo "$PROJECT_PATH"
 
           xcodebuild \
             -project "$PROJECT_PATH" \
             -scheme "tvOSBrowser" \
             -sdk appletvos \
             -configuration Release \
-            -derivedDataPath build \
+            -derivedDataPath "$GITHUB_WORKSPACE/build" \
             CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            | tee xcodebuild.log
+            CODE_SIGNING_REQUIRED=NO
 
-      - name: Find application
+      - name: Show build result
+        if: always()
         run: |
-          echo "Searching for .app..."
+          echo "======================================"
+          echo "BUILD DIRECTORY"
+          echo "======================================"
 
-          APP=$(find build -type d -path "*/Release-appletvos/*.app" -print -quit)
+          find "$GITHUB_WORKSPACE/build" -maxdepth 8 -print 2>/dev/null || true
 
-          if [ -z "$APP" ]; then
-            echo "ERROR: No .app was produced."
-            find build -maxdepth 8 -print || true
-            exit 1
-          fi
+          echo ""
+          echo "======================================"
+          echo "APP FILES"
+          echo "======================================"
 
-          echo "Application found:"
-          echo "$APP"
-
-          echo "APP_PATH=$APP" >> "$GITHUB_ENV"
+          find "$GITHUB_WORKSPACE/build" \
+            -type d \
+            -name "*.app" \
+            -print 2>/dev/null || true
 
       - name: Package IPA
         run: |
           set -e
 
-          rm -rf Payload
-          mkdir Payload
+          APP=$(find "$GITHUB_WORKSPACE/build" \
+            -type d \
+            -name "*.app" \
+            -print -quit)
 
-          cp -R "$APP_PATH" Payload/tvOSBrowser.app
+          if [ -z "$APP" ]; then
+            echo "ERROR: No .app was generated."
+            exit 1
+          fi
+
+          echo "Found:"
+          echo "$APP"
+
+          rm -rf Payload
+          mkdir -p Payload
+
+          cp -R "$APP" Payload/tvOSBrowser.app
 
           zip -r tvOSBrowser-unsigned.ipa Payload
 
-          echo ""
-          echo "IPA created:"
           ls -lh tvOSBrowser-unsigned.ipa
 
       - name: Upload IPA
         uses: actions/upload-artifact@v5
+        if: success()
         with:
           name: tvOSBrowser-unsigned
           path: tvOSBrowser-unsigned.ipa
-
-      - name: Upload build log
-        if: always()
-        uses: actions/upload-artifact@v5
-        with:
-          name: xcodebuild-log
-          path: xcodebuild.log
-          if-no-files-found: ignore
