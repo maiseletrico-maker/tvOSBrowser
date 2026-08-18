@@ -11,6 +11,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+- name: Find Xcode project
+  run: |
+    echo "Current directory:"
+    pwd
+
+    echo "Repository contents:"
+    find . -maxdepth 4 -type f \( -name "*.xcodeproj" -o -name "*.xcworkspace" \) -print
+
+
       - name: Show Xcode versions
         run: |
           ls -la /Applications/ | grep Xcode
