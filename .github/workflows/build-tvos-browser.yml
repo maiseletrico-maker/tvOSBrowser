@@ -1,4 +1,4 @@
-name: Build tvOS Browser
+name: Find tvOS Browser Project
 
 on:
   workflow_dispatch:
@@ -8,131 +8,42 @@ jobs:
     runs-on: macos-14
 
     steps:
-      # 1. Checkout
+
       - name: Checkout
         uses: actions/checkout@v5
 
-      # 2. Show repository structure
-      - name: Find Xcode project
+      - name: Show repository
         run: |
-          echo "Current directory:"
+          echo "================================="
+          echo "CURRENT DIRECTORY"
+          echo "================================="
           pwd
 
           echo ""
-          echo "Repository files:"
-          find . -maxdepth 4 -type f | sort | head -300
+          echo "================================="
+          echo "FILES"
+          echo "================================="
+          find . -maxdepth 5 -print | sort
 
           echo ""
-          echo "Xcode projects:"
+          echo "================================="
+          echo "XCODE PROJECTS"
+          echo "================================="
           find . -type d -name "*.xcodeproj" -print
 
           echo ""
-          echo "Xcode workspaces:"
+          echo "================================="
+          echo "XCODE WORKSPACES"
+          echo "================================="
           find . -type d -name "*.xcworkspace" -print
 
-      # 3. Select Xcode
-      - name: Select Xcode 16.2
+      - name: Check Xcode
         run: |
-          sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+          echo "================================="
+          echo "XCODE"
+          echo "================================="
 
-          echo "Selected Xcode:"
-          xcode-select -p
+          ls -la /Applications/ | grep Xcode || true
 
           echo ""
-          echo "Xcode version:"
           xcodebuild -version
-
-      # 4. Find project and save path
-      - name: Set Xcode project
-        run: |
-          PROJECT=$(find . -type d -name "tvOSBrowser.xcodeproj" -print -quit)
-
-          if [ -z "$PROJECT" ]; then
-            echo "ERROR: tvOSBrowser.xcodeproj was not found."
-            exit 1
-          fi
-
-          echo "Found project:"
-          echo "$PROJECT"
-
-          echo "PROJECT_PATH=$PROJECT" >> "$GITHUB_ENV"
-
-      # 5. List schemes
-      - name: List Xcode schemes
-        run: |
-          echo "Using project:"
-          echo "$PROJECT_PATH"
-
-          xcodebuild \
-            -project "$PROJECT_PATH" \
-            -list
-
-      # 6. Build
-      - name: Build tvOS Browser
-        run: |
-          set -o pipefail
-
-          echo "Building:"
-          echo "$PROJECT_PATH"
-
-          xcodebuild \
-            -project "$PROJECT_PATH" \
-            -scheme "tvOSBrowser" \
-            -sdk appletvos \
-            -configuration Release \
-            -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            | tee xcodebuild.log
-
-      # 7. Show build products
-      - name: Show build products
-        if: always()
-        run: |
-          echo "Build directory:"
-          find build -maxdepth 6 -type d 2>/dev/null || true
-
-          echo ""
-          echo "Application files:"
-          find build -name "*.app" -print 2>/dev/null || true
-
-      # 8. Package IPA
-      - name: Package IPA
-        run: |
-          set -e
-
-          APP=$(find build -type d -path "*/Release-appletvos/*.app" -print -quit)
-
-          if [ -z "$APP" ]; then
-            echo "ERROR: tvOS .app was not found."
-            echo ""
-            echo "Available products:"
-            find build -type f -o -type d | head -200
-            exit 1
-          fi
-
-          echo "Found application:"
-          echo "$APP"
-
-          rm -rf Payload
-          mkdir -p Payload
-
-          cp -R "$APP" Payload/
-
-          zip -r tvOSBrowser-unsigned.ipa Payload
-
-      # 9. Upload IPA
-      - name: Upload IPA
-        uses: actions/upload-artifact@v4
-        with:
-          name: tvOSBrowser-unsigned
-          path: tvOSBrowser-unsigned.ipa
-
-      # 10. Upload build log if something fails
-      - name: Upload Xcode build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: xcodebuild-log
-          path: xcodebuild.log
-          if-no-files-found: ignore
